@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import onboarding
+from app.database import init_db
 
 app = FastAPI(
     title="AI Project Onboarding Assistant",
@@ -16,6 +17,12 @@ app.add_middleware(
 )
 
 app.include_router(onboarding.router, prefix="/api/v1")
+
+
+@app.on_event("startup")
+def startup():
+    init_db()
+
 
 @app.get("/")
 def root():

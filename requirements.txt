@@ -4,3 +4,7 @@ pydantic==2.9.2
 pypdf==4.3.1
 python-multipart==0.0.9
 python-docx==1.1.2
+groq
+sqlalchemy
+psycopg2-binary
+python-dotenv
