@@ -4,7 +4,7 @@ from fastapi import APIRouter, Form, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
 from app.ingestion import convert_to_markdown
 from app.ai import generate_onboarding_steps
-from app.database import get_db, OnboardingStep
+from app.db.database import get_db, OnboardingStep
 from app.dto.CreateProjectRequest import CreateProjectRequest, ProjectName
 
 router = APIRouter(tags=["Onboarding"])

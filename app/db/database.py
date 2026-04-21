@@ -1,8 +1,10 @@
 from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from datetime import datetime, timezone
+from sqlalchemy import ForeignKey
 from dotenv import load_dotenv
 import os
+import uuid
 
 load_dotenv()
 
@@ -27,6 +29,24 @@ class OnboardingStep(Base):
     title       = Column(String, nullable=False)
     content     = Column(Text, nullable=False)
     created_at  = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id         = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    nome       = Column(String, nullable=False)
+    sobrenome  = Column(String, nullable=False)
+    cargo      = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class UserProject(Base):
+    __tablename__ = "user_projects"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    project_id = Column(String, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 def get_db():
