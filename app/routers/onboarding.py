@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from app.ingestion import extract_text_from_pdf, split_into_chunks
+from app.ingestion import convert_to_markdown, split_into_chunks
 
 router = APIRouter(tags=["Onboarding"])
 
@@ -29,25 +29,29 @@ def get_project_summary(project_id: str):
 
 @router.post("/onboarding/project/{project_id}/ingest")
 async def ingest_document(project_id: str, file: UploadFile = File(...)):
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Apenas arquivos PDF são suportados.")
+    allowed = ("pdf", "docx")
+    ext = file.filename.rsplit(".", 1)[-1].lower()
+
+    if ext not in allowed:
+        raise HTTPException(status_code=400, detail=f"Formato não suportado. Envie um PDF ou DOCX.")
 
     contents = await file.read()
 
     if not contents:
         raise HTTPException(status_code=400, detail="Arquivo vazio.")
 
-    text = extract_text_from_pdf(contents)
+    markdown = convert_to_markdown(contents, file.filename)
 
-    if not text:
-        raise HTTPException(status_code=422, detail="Não foi possível extrair texto do PDF.")
+    if not markdown:
+        raise HTTPException(status_code=422, detail="Não foi possível extrair texto do arquivo.")
 
-    chunks = split_into_chunks(text)
+    chunks = split_into_chunks(markdown)
 
     return {
         "project_id": project_id,
         "filename": file.filename,
-        "total_chars": len(text),
+        "format": ext,
+        "total_chars": len(markdown),
         "total_chunks": len(chunks),
         "chunks": chunks,
     }
