@@ -21,6 +21,7 @@ class OnboardingStep(Base):
 
     id          = Column(Integer, primary_key=True, autoincrement=True)
     project_id  = Column(String, nullable=False, index=True)
+    project_name = Column(String, nullable=False)
     filename    = Column(String, nullable=False)
     step_order  = Column(Integer, nullable=False)
     title       = Column(String, nullable=False)
