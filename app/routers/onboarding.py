@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
 from app.ingestion import convert_to_markdown
@@ -6,77 +8,94 @@ from app.database import get_db, OnboardingStep
 
 router = APIRouter(tags=["Onboarding"])
 
-
-@router.post("/ask")
-def ask_question():
-    return {"answer": "resposta de exemplo"}
-
-
-@router.get("/projects")
-def list_projects():
-    return {
-        "projects": [
-            {"id": "default", "name": "Projeto Demo", "status": "indexed", "files": 42},
-        ]
-    }
-
-
-@router.get("/projects/{project_id}/summary")
-def get_project_summary(project_id: str):
-    return {
-        "project_id": project_id,
-        "name": "Projeto Demo",
-        "main_modules": ["auth", "users", "products", "orders"],
-    }
-
-
-@router.get("/onboarding/project/{project_id}/steps")
-def get_onboarding_steps(project_id: str, db: Session = Depends(get_db)):
+@router.get("/onboarding/project/{project_id}")
+def get_project(project_id: str, db: Session = Depends(get_db)):
     steps = (
         db.query(OnboardingStep)
-        .filter_by(project_id=project_id)
+        .filter(OnboardingStep.project_id == project_id)
         .order_by(OnboardingStep.step_order)
         .all()
     )
+
+    if not steps:
+        raise HTTPException(
+            status_code=404,
+            detail="Projeto não encontrado"
+        )
+
     return {
         "project_id": project_id,
+        "total_steps": len(steps),
+        "files": list(set([s.filename for s in steps])),
         "steps": [
-            {"order": s.step_order, "title": s.title, "content": s.content}
+            {
+                "order": s.step_order,
+                "title": s.title,
+                "content": s.content,
+                "filename": s.filename
+            }
             for s in steps
-        ],
+        ]
     }
 
+@router.post("/onboarding/project/ingest")
+async def ingest_document(
+    project_id: str | None = None,
+    files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db)
+):
+    if not project_id:
+        project_id = str(uuid.uuid4())
 
-@router.post("/onboarding/project/{project_id}/ingest")
-async def ingest_document(project_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    ext = file.filename.rsplit(".", 1)[-1].lower()
-    if ext not in ("pdf", "docx"):
-        raise HTTPException(status_code=400, detail="Formato não suportado. Envie um PDF ou DOCX.")
+    all_steps = []
 
-    contents = await file.read()
-    if not contents:
-        raise HTTPException(status_code=400, detail="Arquivo vazio.")
+    for file in files:
+        ext = file.filename.rsplit(".", 1)[-1].lower()
+        if ext not in ("pdf", "docx"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Formato não suportado: {file.filename}. Envie PDF ou DOCX."
+            )
 
-    markdown = convert_to_markdown(contents, file.filename)
-    if not markdown:
-        raise HTTPException(status_code=422, detail="Não foi possível extrair texto do arquivo.")
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Arquivo vazio: {file.filename}"
+            )
 
-    steps = generate_onboarding_steps(markdown)
+        markdown = convert_to_markdown(contents, file.filename)
+        if not markdown:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Não foi possível extrair texto do arquivo: {file.filename}"
+            )
 
-    db.query(OnboardingStep).filter_by(project_id=project_id, filename=file.filename).delete()
-    for i, step in enumerate(steps):
-        db.add(OnboardingStep(
+        steps = generate_onboarding_steps(markdown)
+
+        db.query(OnboardingStep).filter_by(
             project_id=project_id,
-            filename=file.filename,
-            step_order=i + 1,
-            title=step["title"],
-            content=step["content"],
-        ))
+            filename=file.filename
+        ).delete()
+
+        for i, step in enumerate(steps):
+            db.add(OnboardingStep(
+                project_id=project_id,
+                filename=file.filename,
+                step_order=i + 1,
+                title=step["title"],
+                content=step["content"],
+            ))
+
+        all_steps.append({
+            "filename": file.filename,
+            "steps": steps
+        })
+
     db.commit()
 
     return {
         "project_id": project_id,
-        "filename": file.filename,
-        "total_steps": len(steps),
-        "steps": steps,
+        "total_files": len(files),
+        "files": all_steps
     }
